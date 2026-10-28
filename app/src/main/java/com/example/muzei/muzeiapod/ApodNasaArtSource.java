@@ -18,107 +18,93 @@
 package com.example.muzei.muzeiapod;
 
 import android.net.Uri;
-
-import java.text.SimpleDateFormat;
-import java.util.Date;
-
-import java.net.MalformedURLException;
-import java.net.URI;
-import java.net.URL;
-import java.net.URISyntaxException;
+import android.text.Html;
+import android.util.Log;
 
 import com.google.android.apps.muzei.api.provider.MuzeiArtProvider;
 import com.google.android.apps.muzei.api.provider.Artwork;
 
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 
 public class ApodNasaArtSource extends MuzeiArtProvider {
-    private static final String TAG = "ApodNasaforMuzei";
-
-    public Document getURLDocument(URL url) {
-        Document d;
-        try {
-            d = Jsoup.parse(url, 20*1000); /* ms timeout */
-        } catch (IOException e) {
-            return null;
-        }
-        return d;
-    }
+    private static final String TAG = "ApodNasaForMuzei";
+    private static final String API_URL = "https://science.nasa.gov/wp-json/wp/v2/apod-basic/";
+    private static final int TIMEOUT_MILLIS = 20_000;
 
     @Override
     public void onLoadRequested(boolean initial) {
-        URI topUri;
+        HttpURLConnection connection = null;
         try {
-            topUri = new URI("https://apod.nasa.gov/");
-        } catch (URISyntaxException e) {
-            return;
+            Uri apiUri = Uri.parse(API_URL).buildUpon()
+                    .appendQueryParameter("per_page", "10")
+                    .appendQueryParameter("_fields", "date,title,permalink,media_type,hdurl,credit")
+                    .build();
+            connection = (HttpURLConnection) new URL(apiUri.toString()).openConnection();
+            connection.setConnectTimeout(TIMEOUT_MILLIS);
+            connection.setReadTimeout(TIMEOUT_MILLIS);
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode != HttpURLConnection.HTTP_OK) {
+                Log.e(TAG, "NASA Science APOD endpoint returned HTTP " + responseCode);
+                return;
+            }
+
+            JSONArray entries = new JSONArray(readResponse(connection.getInputStream()));
+            for (int i = 0; i < entries.length(); i++) {
+                JSONObject apod = entries.getJSONObject(i);
+                if (!"image".equals(apod.optString("media_type"))) {
+                    continue;
+                }
+
+                String imageUrl = apod.optString("hdurl", "");
+                if (imageUrl.isEmpty()) {
+                    continue;
+                }
+
+                String date = apod.getString("date");
+                String permalink = apod.getString("permalink");
+                String credit = Html.fromHtml(apod.optString("credit", ""),
+                        Html.FROM_HTML_MODE_LEGACY).toString().trim();
+                String byline = credit.isEmpty() ? date : date + " · " + credit;
+                setArtwork(new Artwork.Builder()
+                        .title(apod.getString("title"))
+                        .byline(byline)
+                        .persistentUri(Uri.parse(imageUrl))
+                        .token(date)
+                        .webUri(Uri.parse(permalink))
+                        .build());
+                return;
+            }
+            Log.e(TAG, "NASA Science APOD response contained no image with an image URL.");
+        } catch (IOException | JSONException | IllegalArgumentException e) {
+            Log.e(TAG, "Failed to load NASA Science APOD artwork.", e);
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
         }
-
-        URI mainUri = topUri.resolve("/apod/astropix.html");
-        URL mainUrl;
-        try {
-            mainUrl = mainUri.toURL();
-        } catch (MalformedURLException e) {
-            return;
-        }
-        Document urlDoc =  getURLDocument(mainUrl);
-
-        if (urlDoc == null) {
-            return;
-        }
-
-        /* TODO code below should go to a separate method/class */
-
-        /* start parsing page */
-        Element body = urlDoc.body();
-
-        /* to get image URI, look for the anchor just above it */
-        Element firstCenterTag = body.child(0);
-        Element secondPTag = firstCenterTag.child(2);
-        Elements anchors = secondPTag.getElementsByTag("a");
-        if (anchors.isEmpty()) {
-            /* probably a video or something fancy */
-            return;
-        }
-
-        /* get the image uri */
-        Element imgAnchor = anchors.last();
-        Element img = imgAnchor.getElementsByTag("img").first();
-        URI bigImageUri = topUri.resolve("/apod/" + img.attr("src"));
-        String uri = bigImageUri.toString();
-
-        /* get title */
-        Element secondCenterTag = body.child(1);
-        Element titleElem = secondCenterTag.child(0);
-        String title = titleElem.text();
-
-        /* get byline */
-        String secondCenterText = secondCenterTag.text();
-        /* byline: everything after 'title' above */
-        int idx = secondCenterText.lastIndexOf(title) + title.length();
-        String byline = secondCenterText.substring(idx).trim();
-
-        /* figure out the permanent link */
-        /* TODO it would be safer to do this looking at the next/previous
-         * anchors in the page...
-         */
-        SimpleDateFormat sdf = new SimpleDateFormat("yyMMdd");
-        String date = sdf.format(new Date());
-        String link = "https://apod.nasa.gov/apod/ap" + date + ".html";
-
-        setArtwork(new Artwork.Builder()
-            .title(title)
-            .byline(byline)
-            .persistentUri(Uri.parse(uri))
-            .token(title)
-            .webUri(Uri.parse(link))
-            .build());
-        //updates are now set by "auto-advance" in muzei itself
     }
-}
 
+    private String readResponse(InputStream inputStream) throws IOException {
+        StringBuilder response = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                response.append(line);
+            }
+        }
+        return response.toString();
+    }
+
+}

@@ -17,6 +17,7 @@
 
 <resources>
     <string name="app_name">NASA APOD for Muzei</string>
+    <string name="app_description">A Muzei extension showing NASA\'s Astronomy Picture of the Day, with image credits from NASA Science.</string>
     <string name="source_name">Astronomy Picture of the Day</string>
-    <string name="source_description">NASA\'s APOD: Each day a different image or photograph of our fascinating universe</string>
+    <string name="source_description">NASA\'s Astronomy Picture of the Day, provided by NASA Science</string>
 </resources>

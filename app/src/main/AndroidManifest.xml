@@ -23,7 +23,8 @@
     <uses-permission android:name="android.permission.ACCESS_PERMISSION" />
 
     <application android:allowBackup="true"
-        android:label="@string/app_name">
+        android:label="@string/app_name"
+        android:description="@string/app_description">
 
         <provider android:name=".ApodNasaArtSource"
             android:authorities="com.example.muzei.muzeiapod.ApodNasaArtSource"

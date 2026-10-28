@@ -17,6 +17,7 @@
 
 <resources>
     <string name="app_name">НАСА АПОД за Музеј</string>
+    <string name="app_description">Музеи додатак који приказује НАСА-ину Астрономску слику дана, са кредитима за слике са NASA Science.</string>
     <string name="source_name">Астрономска слика дана</string>
-    <string name="source_description">НАСА АПОД: Сваког дана друга слика или фотографија нашег задивљујућег свемира</string>
+    <string name="source_description">НАСА-ина Астрономска слика дана, коју обезбеђује NASA Science</string>
 </resources>
